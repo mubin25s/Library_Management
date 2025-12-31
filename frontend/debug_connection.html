@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Connection Diagnostic</title>
+    <style>
+        body { font-family: sans-serif; padding: 2rem; }
+        .success { color: green; }
+        .error { color: red; }
+        .log { background: #f0f0f0; padding: 1rem; border: 1px solid #ccc; white-space: pre-wrap; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <h1>System Diagnostic Tool</h1>
+    <button onclick="runDiagnostics()" style="padding: 10px 20px; cursor: pointer;">Run Tests</button>
+    <div id="output" class="log">Ready to test...</div>
+
+    <script>
+        const API_BASE = 'http://localhost/Library_Management/backend/api';
+
+        function log(msg, type = 'info') {
+            const el = document.getElementById('output');
+            const span = document.createElement('div');
+            span.textContent = msg;
+            if(type === 'error') span.className = 'error';
+            if(type === 'success') span.className = 'success';
+            el.appendChild(span);
+        }
+
+        async function runDiagnostics() {
+            document.getElementById('output').innerHTML = '';
+            log('Starting Tests...', 'info');
+
+            // Test 1: API Accessibility
+            try {
+                log('\n1. Testing API Accessibility...');
+                const res = await fetch(`${API_BASE}/books.php`, { method: 'GET' });
+                
+                if(res.ok) {
+                    const data = await res.json();
+                    if(data.success) {
+                        log(`   ✅ Success! Connected to Library System.`, 'success');
+                        log(`   📚 Found ${data.data.length} books in the collection.`);
+                        log('   System is READY.', 'success');
+                    } else {
+                        log(`   ⚠️ API Error: ${data.message}`, 'error');
+                    }
+                } else {
+                    log(`   ❌ HTTP Error: ${res.status}`, 'error');
+                }
+
+            } catch (err) {
+                log(`   ❌ FATAL ERROR: ${err.message}`, 'error');
+                log('   Make sure you are running this on localhost via XAMPP/Apache.');
+            }
+        }
+    </script>
+</body>
+</html>

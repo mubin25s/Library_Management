@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Athena</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body onload="currentRole='librarian'; adminInit()">
+    <div class="container">
+    <nav>
+        <div class="logo">Librarian Dashboard</div>
+        <div style="display:flex; align-items:center; gap:10px">
+            <div style="display:flex; gap:10px; margin-right:15px; border-right:2px solid #ddd; padding-right:15px">
+                <button class="btn-outline" onclick="showUsers()">View Users</button>
+                <button class="btn-outline" onclick="showAuthors()">View Authors</button>
+
+            </div>
+            <button class="btn-outline" onclick="logout()" style="border-color:#e74c3c; color:#e74c3c">Logout</button>
+        </div>
+    </nav>
+
+        <!-- Stats Row -->
+        <div class="stats-grid">
+            <div class="card stat-card" onclick="showStatDetails('total')" style="cursor:pointer">
+                <h3>Total Books</h3>
+                <div class="value" id="stat-total-books">0</div>
+            </div>
+            <div class="card stat-card" onclick="showStatDetails('loans')" style="cursor:pointer; background: linear-gradient(135deg, #e67e22, #d35400);">
+                <h3>Active Loans</h3>
+                <div class="value" id="stat-active-loans">0</div>
+            </div>
+            <div class="card stat-card" onclick="showStatDetails('available')" style="cursor:pointer; background: linear-gradient(135deg, #27ae60, #2ecc71);">
+                <h3>Books Available</h3>
+                <div class="value" id="stat-available-books">0</div>
+            </div>
+        </div>
+
+        <div class="dashboard-grid">
+            <!-- Left: Add Book -->
+            <div class="card">
+                <h3 style="margin-bottom: 1.5rem;">Add New Book</h3>
+                <form onsubmit="addBook(event)">
+                    <!-- Book Basic Info -->
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px">
+                        <div class="form-group">
+                            <label>ISBN</label>
+                            <input type="text" id="book-isbn" placeholder="e.g. 978-3-16-148410-0" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Book Title</label>
+                            <input type="text" id="book-title" placeholder="e.g. The Great Gatsby" required>
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px">
+                         <div class="form-group">
+                            <label>Published Year</label>
+                            <input type="number" id="book-year" placeholder="2024" required>
+                        </div>
+                         <div class="form-group">
+                            <label>Language</label>
+                            <select id="book-lang" required style="width:100%; padding:10px; border:1px solid #ddd; border-radius:4px">
+                                <option value="English">English</option>
+                                <option value="Spanish">Spanish</option>
+                                <option value="French">French</option>
+                                <option value="German">German</option>
+                                <option value="Bengali">Bengali</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Quantity</label>
+                        <input type="number" id="book-quantity" value="1" min="1" required>
+                    </div>
+
+                    <!-- Genre Select -->
+                    <div class="form-group">
+                        <label>Genre</label>
+                        <select id="book-genre" required style="width:100%; padding:10px; border:1px solid #ddd; border-radius:4px">
+                            <option value="">Select Genre...</option>
+                            <option value="Fiction">Fiction</option>
+                            <option value="Non-Fiction">Non-Fiction</option>
+                            <option value="Sci-Fi">Sci-Fi</option>
+                            <option value="Mystery">Mystery</option>
+                            <option value="Thriller">Thriller</option>
+                            <option value="Romance">Romance</option>
+                            <option value="Fantasy">Fantasy</option>
+                            <option value="Biography">Biography</option>
+                            <option value="History">History</option>
+                            <option value="Science">Science</option>
+                            <option value="Technology">Technology</option>
+                            <option value="Self-Help">Self-Help</option>
+                            <option value="Poetry">Poetry</option>
+                            <option value="Horror">Horror</option>
+                            <option value="Adventure">Adventure</option>
+                        </select>
+                    </div>
+
+                    <!-- Author Section -->
+                    <div style="background:#f8f9fa; padding:15px; border-radius:8px; border:1px solid #eee; margin-bottom:15px">
+                        <h4 style="margin-bottom:10px; font-size:1rem; color:#2c3e50">Author Details</h4>
+                        <div class="form-group">
+                            <label>Author ID</label>
+                            <div style="display:flex; gap:10px">
+                                <input type="number" id="author-id-check" placeholder="Enter Author ID" required style="flex:1" onchange="checkAuthorId()">
+                                <button type="button" class="btn-outline" onclick="checkAuthorId()">Check</button>
+                            </div>
+                            <small id="author-msg" style="display:block; margin-top:5px; font-weight:bold"></small>
+                        </div>
+
+                        <!-- Dynamic New Author Form -->
+                        <div id="new-author-form" style="display:none; margin-top:10px; padding-top:10px; border-top:1px dashed #ccc">
+                            <p style="color:#e67e22; font-size:0.9rem; margin-bottom:10px">Author not found. Please add new author details below:</p>
+                            <div class="form-group">
+                                <label>Author Name</label>
+                                <input type="text" id="new-author-name">
+                            </div>
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px">
+                                <div class="form-group">
+                                    <label>Date of Birth</label>
+                                    <input type="date" id="new-author-dob">
+                                </div>
+                                <div class="form-group">
+                                    <label>Country</label>
+                                    <input type="text" id="new-author-country" placeholder="e.g. USA">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn" style="width: 100%">Add Book (and Author)</button>
+                </form>
+            </div>
+
+            <!-- Right: Inventory List -->
+            <div>
+                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h2>Library Inventory</h2>
+                    <button class="btn-outline btn btn-sm" onclick="adminInit()">Refresh Data</button>
+                </div>
+                <div style="margin-bottom: 1rem;">
+                    <input type="text" id="search-box" onkeyup="filterBooks(true, false)" placeholder="Search books..." style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                </div>
+                <div id="books-container" style="display: grid; gap: 1rem;">
+                    <!-- Books loaded here (Cards layout) -->
+                </div>
+            </div>
+        </div>
+
+        <h2 style="margin: 3rem 0 1.5rem 0;">Recent Transactions & Returns</h2>
+        <div class="card table-container" style="padding: 0;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Book</th>
+                        <th>Issue Date</th>
+                        <th>Due Date</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="history-body">
+                    <!-- Transactions loaded here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <script src="js/app.js"></script>
+</body>
+</html>

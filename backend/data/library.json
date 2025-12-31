@@ -1,0 +1,48 @@
+{
+    "users": [
+        {
+            "user_id": 1,
+            "name": "Admin User",
+            "email": "admin@library.com",
+            "password": "$2y$10$YourHashedPasswordHereOrJustUseRegister",
+            "role": "librarian"
+        }
+    ],
+    "books": [
+        {
+            "book_id": 1,
+            "title": "The Great Gatsby",
+            "author": "F. Scott Fitzgerald",
+            "category": "Fiction",
+            "quantity": 5,
+            "isbn": "9780743273565"
+        },
+        {
+            "book_id": 2,
+            "title": "1984",
+            "author": "George Orwell",
+            "category": "Dystopian",
+            "quantity": 8,
+            "isbn": "9780451524935"
+        },
+        {
+            "book_id": 3,
+            "title": "Sapiens",
+            "author": "Yuval Noah Harari",
+            "category": "History",
+            "quantity": 3,
+            "isbn": "9780062316097"
+        },
+        {
+            "book_id": 4,
+            "title": "Clean Code",
+            "author": "Robert C. Martin",
+            "category": "Technology",
+            "quantity": 4,
+            "isbn": "9780132350884"
+        }
+    ],
+    "transactions": [],
+    "authors": [],
+    "categories": []
+}
