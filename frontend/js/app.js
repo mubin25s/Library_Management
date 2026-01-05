@@ -1,8 +1,14 @@
 const API_URL = '../backend/api';
+// Version: 1.1.1 (Final Ultimate Sync + Header Fix)
+
+// Safety Check: Detect if running without a server
+if (window.location.protocol === 'file:') {
+    alert("CRITICAL ERROR: You are opening the file directly from a folder. PHP will NOT work.\n\nPlease open this through XAMPP using: http://localhost/Library_Management/frontend/index.html");
+}
 
 // --- MOCK API (LOCAL STORAGE) ---
 // This allows the app to work without a PHP server
-const USE_MOCK_API = true;
+const USE_MOCK_API = false;
 
 const MockAPI = {
     // ... (init, login, register remain the same, I will target the insertion point carefully)
@@ -325,9 +331,12 @@ async function register(e) {
         if(USE_MOCK_API) {
             data = await MockAPI.register(userData);
         } else {
-             // PHP backend update would be needed here
-             showAlert('Backend not updated for new fields yet', 'error');
-             return;
+             const res = await fetch(`${API_URL}/auth.php?action=register&t=${Date.now()}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(userData)
+            });
+             data = await res.json();
         }
 
         if(data.success) {
@@ -354,16 +363,18 @@ async function login(e) {
         if(USE_MOCK_API) {
              data = await MockAPI.login(email, password);
         } else {
-            const res = await fetch(`${API_URL}/auth.php?action=login`, {
-                 method: 'POST',
-                 body: JSON.stringify({ email, password })
-            });
+             const res = await fetch(`${API_URL}/auth.php?action=login&t=${Date.now()}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ email, password })
+             });
             const text = await res.text(); // Get raw text first to debug non-JSON responses
             try {
                 data = JSON.parse(text);
             } catch(e) {
                 console.error('Server Responded with non-JSON:', text);
-                showAlert('Server Error. Check Database Connection.', 'error');
+                const snippet = text.trim().substring(0, 100) || '[Empty Response]';
+                showAlert(`Login Error: Invalid server response. Snippet: "${snippet}"`, 'error');
                 return;
             }
         }
@@ -541,12 +552,27 @@ async function loadBooks(isAdmin = false, isGuest = false) {
         if(USE_MOCK_API) {
             data = await MockAPI.getBooks();
         } else {
-            const res = await fetch(`${API_URL}/books.php`);
-            data = await res.json();
+            const res = await fetch(`${API_URL}/books.php?t=${Date.now()}`);
+            if (!res.ok) {
+                const text = await res.text();
+                console.error(`HTTP Error ${res.status}:`, text);
+                showAlert(`Server error (HTTP ${res.status}). Snippet: ${text.substring(0, 50)}`, 'error');
+                return;
+            }
+            const text = await res.text();
+            try {
+                data = JSON.parse(text);
+            } catch(e) {
+                console.error('Failed to parse books JSON. Raw response:', text);
+                const snippet = text.trim().substring(0, 100) || '[Empty Response]';
+                showAlert(`Failed to load books. The server returned an invalid response. Snippet: "${snippet}"`, 'error');
+                return;
+            }
         }
         
         if(!data.success) {
             console.error(data.message);
+            showAlert(data.message || 'Failed to retrieve books', 'error');
             return;
         }
 
@@ -573,26 +599,39 @@ async function adminInit() {
     updateDashboardStats(); 
 }
 
-function updateDashboardStats() {
+async function updateDashboardStats() {
     if(currentRole !== 'librarian') return;
     
-    const books = JSON.parse(localStorage.getItem('lib_books')) || [];
-    const txns = JSON.parse(localStorage.getItem('lib_transactions')) || [];
-    
-    // Calculate Stats
-    const available = books.reduce((acc, b) => acc + parseInt(b.quantity || 0), 0);
-    const activeLoans = txns.filter(t => t.status === 'issued').length;
-    const totalInventory = available + activeLoans; // Total owned by library
+    try {
+        // Fetch books, transactions, and users for stats
+        const [booksRes, txnsRes] = await Promise.all([
+            fetch(`${API_URL}/books.php`),
+            fetch(`${API_URL}/transactions.php`)
+        ]);
+        
+        const booksData = await booksRes.json();
+        const txnsData = await txnsRes.json();
+        
+        const books = booksData.data || [];
+        const txns = txnsData.data || [];
+        
+        // Calculate Stats
+        const available = books.reduce((acc, b) => acc + parseInt(b.quantity || 0), 0);
+        const activeLoans = txns.filter(t => t.status === 'issued').length;
+        const totalInventory = available + activeLoans; // Total owned by library
 
-    // Update UI
-    if(document.getElementById('stat-total-books')) 
-        document.getElementById('stat-total-books').innerText = totalInventory;
-    
-    if(document.getElementById('stat-active-loans')) 
-        document.getElementById('stat-active-loans').innerText = activeLoans;
-    
-    if(document.getElementById('stat-available-books')) 
-        document.getElementById('stat-available-books').innerText = available;
+        // Update UI
+        if(document.getElementById('stat-total-books')) 
+            document.getElementById('stat-total-books').innerText = totalInventory;
+        
+        if(document.getElementById('stat-active-loans')) 
+            document.getElementById('stat-active-loans').innerText = activeLoans;
+        
+        if(document.getElementById('stat-available-books')) 
+            document.getElementById('stat-available-books').innerText = available;
+    } catch (err) {
+        console.error('Stats Update Failed:', err);
+    }
 }
 
 // Logic: Load History
@@ -701,11 +740,14 @@ function renderBooks(books, isAdmin, isGuest) {
                     <h3 class="card-title">${book.title}</h3>
                     <div class="card-author">by ${book.author_name}</div>
                     
-                    <div style="margin-top:auto; display:flex; justify-content:space-between; align-items:center">
+                    <div style="margin-top:auto; display:flex; justify-content:space-between; align-items:center; gap:5px">
                         <div>
                            <strong>Stock: ${book.quantity}</strong>
                         </div>
-                        <button class="btn-outline btn-sm" onclick="deleteBook(${book.book_id})" style="border-color:var(--danger); color:var(--danger)">Remove</button>
+                        <div style="display:flex; gap:5px">
+                            <button class="btn-outline btn-sm" onclick='openEditBookModal(${JSON.stringify(book).replace(/'/g, "&apos;")})'>Edit</button>
+                            <button class="btn-outline btn-sm" onclick="deleteBook(${book.book_id})" style="border-color:var(--danger); color:var(--danger)">Remove</button>
+                        </div>
                     </div>
                 </div>
             `;
@@ -842,6 +884,18 @@ async function addBook(e) {
                 showAlert(authRes.message, 'error');
                 return;
             }
+        } else {
+            // PHP Backend: Create Author First if needed
+            const authRes = await fetch(`${API_URL}/authors.php`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(authorData)
+            });
+            const authData = await authRes.json();
+            if(!authData.success) {
+                showAlert('Failed to create author: ' + authData.message, 'error');
+                return;
+            }
         }
     }
 
@@ -861,8 +915,12 @@ async function addBook(e) {
         data = await MockAPI.addBook(bookData);
     } else {
         // PHP backend logic
-        showAlert('Backend not updated for new book schema', 'error');
-        return;
+        const res = await fetch(`${API_URL}/books.php`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bookData)
+        });
+        data = await res.json();
     }
     
     if(data.success) {
@@ -873,6 +931,76 @@ async function addBook(e) {
         document.getElementById('author-msg').innerText = '';
     } else {
         showAlert(data.message, 'error');
+    }
+}
+
+async function openEditBookModal(book) {
+    const genres = ["Fiction", "Non-Fiction", "Sci-Fi", "Mystery", "Thriller", "Romance", "Fantasy", "Biography", "History", "Science", "Technology", "Self-Help", "Poetry", "Horror", "Adventure"];
+    const genreOptions = genres.map(g => `<option value="${g}" ${g === book.category_name ? 'selected' : ''}>${g}</option>`).join('');
+    
+    const content = `
+        <div class="form-group" style="margin-bottom:1rem">
+            <label>Title</label>
+            <input type="text" id="edit-title" value="${book.title}" required style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px">
+        </div>
+        <div class="form-group" style="margin-bottom:1rem">
+            <label>ISBN</label>
+            <input type="text" id="edit-isbn" value="${book.isbn || ''}" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px">
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:1rem">
+            <div class="form-group">
+                <label>Year</label>
+                <input type="number" id="edit-year" value="${book.year_published || ''}" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px">
+            </div>
+            <div class="form-group">
+                <label>Quantity</label>
+                <input type="number" id="edit-qty" value="${book.quantity}" required style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>Genre</label>
+            <select id="edit-genre" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px">${genreOptions}</select>
+        </div>
+    `;
+
+    showModal({
+        title: 'Edit Book Detail',
+        content,
+        buttons: [
+            { text: 'Save Changes', type: 'primary', onClick: () => updateBook(book.book_id) },
+            { text: 'Cancel', type: 'outline' }
+        ]
+    });
+}
+
+async function updateBook(id) {
+    const title = document.getElementById('edit-title').value;
+    const isbn = document.getElementById('edit-isbn').value;
+    const year = document.getElementById('edit-year').value;
+    const qty = document.getElementById('edit-qty').value;
+    const genre = document.getElementById('edit-genre').value;
+
+    const bookData = {
+        title, isbn, quantity: parseInt(qty), 
+        year_published: year, category_name: genre
+    };
+
+    try {
+        const res = await fetch(`${API_URL}/books.php?id=${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bookData)
+        });
+        const data = await res.json();
+        if(data.success) {
+            showAlert('Book updated successfully');
+            closeModal();
+            adminInit();
+        } else {
+            showAlert(data.message, 'error');
+        }
+    } catch(err) {
+        showAlert('Failed to update book', 'error');
     }
 }
 
@@ -945,8 +1073,9 @@ async function processIssue(userId, bookId, days, notes) {
     if(USE_MOCK_API) {
         data = await MockAPI.issueBook(userId, bookId, days, notes);
     } else {
-        const res = await fetch(`${API_URL}/transactions.php?action=issue`, {
+        const res = await fetch(`${API_URL}/transactions.php?action=issue&t=${Date.now()}`, {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ user_id: userId, book_id: bookId, days: days, notes: notes })
         });
         data = await res.json();
@@ -1009,8 +1138,9 @@ async function processReturn(txnId) {
     if(USE_MOCK_API) {
         data = await MockAPI.returnBook(txnId);
     } else {
-        const res = await fetch(`${API_URL}/transactions.php?action=return`, {
+        const res = await fetch(`${API_URL}/transactions.php?action=return&t=${Date.now()}`, {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ transaction_id: txnId })
         });
         data = await res.json();
@@ -1032,8 +1162,9 @@ async function processExtend(txnId) {
     if(USE_MOCK_API) {
         data = await MockAPI.extendLoan(txnId);
     } else {
-        const res = await fetch(`${API_URL}/transactions.php?action=extend`, {
+        const res = await fetch(`${API_URL}/transactions.php?action=extend&t=${Date.now()}`, {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ transaction_id: txnId })
         });
         data = await res.json();
@@ -1126,8 +1257,12 @@ async function submitReview(bookId, userId, rating, comment) {
     if(USE_MOCK_API) {
         data = await MockAPI.addReview(bookId, userId, rating, comment);
     } else {
-        alert('Backend support for reviews coming soon.');
-        return;
+        const res = await fetch(`${API_URL}/reviews.php?t=${Date.now()}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ book_id: bookId, user_id: userId, rating: rating, comment: comment })
+        });
+        data = await res.json();
     }
 
     if(data.success) {
@@ -1304,8 +1439,17 @@ async function showStatDetails(type) {
 
     let title = '';
     let content = '';
-    const books = JSON.parse(localStorage.getItem('lib_books')) || [];
-    const txns = JSON.parse(localStorage.getItem('lib_transactions')) || [];
+    
+    const [booksRes, txnsRes] = await Promise.all([
+        fetch(`${API_URL}/books.php`),
+        fetch(`${API_URL}/transactions.php`)
+    ]);
+    
+    const booksData = await booksRes.json();
+    const txnsData = await txnsRes.json();
+    
+    const books = booksData.data || [];
+    const txns = txnsData.data || [];
 
     if(type === 'total') {
         title = 'Total Library Inventory';
@@ -1321,19 +1465,13 @@ async function showStatDetails(type) {
     } 
     else if(type === 'loans') {
         title = 'Active Loans Details';
-        const users = JSON.parse(localStorage.getItem('lib_users')) || [];
         const active = txns.filter(t => t.status === 'issued');
         
         const rows = active.map(t => {
-            const user = users.find(u => u.user_id === t.user_id);
-            const book = books.find(b => b.book_id === t.book_id);
-            const bookTitle = book ? book.title : (t.title || 'Unknown Book');
-            const userName = user ? user.name : 'Unknown User';
-            
             return `
             <tr>
-                <td><strong>${bookTitle}</strong></td>
-                <td>${userName}</td>
+                <td><strong>${t.title}</strong></td>
+                <td>${t.user_name}</td>
                 <td>${t.return_date}</td>
                 <td style="color:#e67e22">Issued</td>
             </tr>

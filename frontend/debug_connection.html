@@ -2,58 +2,130 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Connection Diagnostic</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Athena Library - System Diagnostic</title>
+    <link rel="stylesheet" href="css/style.css">
     <style>
-        body { font-family: sans-serif; padding: 2rem; }
-        .success { color: green; }
-        .error { color: red; }
-        .log { background: #f0f0f0; padding: 1rem; border: 1px solid #ccc; white-space: pre-wrap; margin-top: 1rem; }
+        .test-row {
+            padding: 1rem;
+            margin: 0.5rem 0;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .status-badge {
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
+        .status-ok { background: #2ecc71; color: white; }
+        .status-fail { background: #e74c3c; color: white; }
+        .status-pending { background: #f1c40f; color: black; }
+        pre { background: #000; color: #0f0; padding: 10px; border-radius: 5px; overflow-x: auto; font-size: 0.9rem; }
     </style>
 </head>
 <body>
-    <h1>System Diagnostic Tool</h1>
-    <button onclick="runDiagnostics()" style="padding: 10px 20px; cursor: pointer;">Run Tests</button>
-    <div id="output" class="log">Ready to test...</div>
+    <div class="container">
+        <header>
+            <h1>System Diagnostic Tool</h1>
+            <p>Identifying why you can't access the database or website.</p>
+        </header>
+
+        <div class="card">
+            <h3>1. Protocol Check</h3>
+            <div class="test-row" id="check-protocol">
+                <span>Running via Web Server?</span>
+                <div class="status-badge status-pending">Checking...</div>
+            </div>
+
+            <h3>2. Backend connectivity (API)</h3>
+            <div class="test-row" id="check-config">
+                <span>config.php (Settings)</span>
+                <div class="status-badge status-pending">Testing...</div>
+            </div>
+            <div class="test-row" id="check-books">
+                <span>books.php (Inventory)</span>
+                <div class="status-badge status-pending">Testing...</div>
+            </div>
+
+            <h3>3. Database Integrity</h3>
+            <div id="db-msg"></div>
+            <button class="btn" onclick="runTests()">Re-Run Tests</button>
+            <a href="index.html" class="btn-outline">Back to Login</a>
+        </div>
+
+        <div class="card">
+            <h3>Technical Console</h3>
+            <pre id="console-output">Ready to test...</pre>
+        </div>
+    </div>
 
     <script>
-        const API_BASE = 'http://localhost/Library_Management/backend/api';
+        const log = (msg) => {
+            const out = document.getElementById('console-output');
+            out.innerText += "\n> " + msg;
+            console.log(msg);
+        };
 
-        function log(msg, type = 'info') {
-            const el = document.getElementById('output');
-            const span = document.createElement('div');
-            span.textContent = msg;
-            if(type === 'error') span.className = 'error';
-            if(type === 'success') span.className = 'success';
-            el.appendChild(span);
+        function setStatus(id, ok, msg) {
+            const el = document.getElementById(id).querySelector('.status-badge');
+            el.className = 'status-badge ' + (ok ? 'status-ok' : 'status-fail');
+            el.innerText = ok ? (msg || 'OK') : (msg || 'FAIL');
         }
 
-        async function runDiagnostics() {
-            document.getElementById('output').innerHTML = '';
-            log('Starting Tests...', 'info');
+        async function runTests() {
+            document.getElementById('console-output').innerText = "Starting Tests...";
+            
+            // 1. Protocol
+            log("Checking protocol...");
+            if (window.location.protocol === 'file:') {
+                setStatus('check-protocol', false, 'FILE PROTOCOL');
+                log("FAIL: You are opening this via folder, not via http://localhost/");
+            } else {
+                setStatus('check-protocol', true, 'HTTP/S');
+                log("PASS: Protocol is verified.");
+            }
 
-            // Test 1: API Accessibility
+            // 2. config.php
+            log("Testing config.php...");
             try {
-                log('\n1. Testing API Accessibility...');
-                const res = await fetch(`${API_BASE}/books.php`, { method: 'GET' });
-                
-                if(res.ok) {
-                    const data = await res.json();
-                    if(data.success) {
-                        log(`   ✅ Success! Connected to Library System.`, 'success');
-                        log(`   📚 Found ${data.data.length} books in the collection.`);
-                        log('   System is READY.', 'success');
-                    } else {
-                        log(`   ⚠️ API Error: ${data.message}`, 'error');
-                    }
+                const res = await fetch('../backend/api/config.php');
+                const text = await res.text();
+                log("Raw Response: " + text.substring(0, 100));
+                if (res.ok) {
+                    setStatus('check-config', true);
+                    log("PASS: config.php is reachable.");
                 } else {
-                    log(`   ❌ HTTP Error: ${res.status}`, 'error');
+                    setStatus('check-config', false, 'HTTP ' + res.status);
+                    log("FAIL: config.php returned " + res.status);
                 }
+            } catch(e) {
+                setStatus('check-config', false, 'ERROR');
+                log("ERROR: " + e.message);
+            }
 
-            } catch (err) {
-                log(`   ❌ FATAL ERROR: ${err.message}`, 'error');
-                log('   Make sure you are running this on localhost via XAMPP/Apache.');
+            // 3. books.php
+            log("Testing books.php...");
+            try {
+                const res = await fetch('../backend/api/books.php?t=' + Date.now());
+                const data = await res.json();
+                if (data.success) {
+                    setStatus('check-books', true, 'DATA LOADED');
+                    log("PASS: Database is connected and books are retrieved.");
+                } else {
+                    setStatus('check-books', false, 'JSON ERROR');
+                    log("FAIL: Server said: " + data.message);
+                }
+            } catch(e) {
+                setStatus('check-books', false, 'FETCH FAIL');
+                log("ERROR: " + e.message);
             }
         }
+
+        window.onload = runTests;
     </script>
 </body>
 </html>

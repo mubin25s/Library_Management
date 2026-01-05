@@ -8,21 +8,22 @@ require_once 'api/config.php';
 $response = [];
 
 try {
+    $pdo = getDB();
     // Check Connection
     $response['connection'] = 'Success';
     
     // Check Tables
-    $stmt = $conn->query("SHOW TABLES");
+    $stmt = $pdo->query("SHOW TABLES");
     $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
     $response['tables'] = $tables;
     
     // Check Users Table Structure
     if(in_array('users', $tables)) {
-        $stmt = $conn->query("DESCRIBE users");
+        $stmt = $pdo->query("DESCRIBE users");
         $response['users_structure'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
         // Check if any users exist
-        $stmt = $conn->query("SELECT count(*) as count FROM users");
+        $stmt = $pdo->query("SELECT count(*) as count FROM users");
         $response['user_count'] = $stmt->fetch(PDO::FETCH_ASSOC)['count'];
     } else {
         $response['error'] = 'Users table missing!';
